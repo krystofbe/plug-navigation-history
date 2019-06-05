@@ -24,6 +24,22 @@ defmodule NavigationHistoryTest do
     assert NavigationHistory.last_paths(conn) == ["/foo", "/"]
   end
 
+  test "repeatedly putting path only puts unique path once" do
+    conn = conn(:get, "/") |> with_session
+    opts = NavigationHistory.Tracker.init([])
+    conn = NavigationHistory.Tracker.call(conn, opts)
+    assert NavigationHistory.last_path(conn) == "/"
+
+    conn = %{conn | request_path: "/foo"}
+    conn = NavigationHistory.Tracker.call(conn, opts)
+    conn = %{conn | request_path: "/foo"}
+    conn = NavigationHistory.Tracker.call(conn, opts)
+    conn = %{conn | request_path: "/foo"}
+    conn = NavigationHistory.Tracker.call(conn, opts)
+    assert NavigationHistory.last_path(conn) == "/foo"
+    assert NavigationHistory.last_paths(conn) == ["/foo", "/"]
+  end
+
   test "last_path with index" do
     conn = conn(:get, "/") |> with_session
     opts = NavigationHistory.Tracker.init([])
@@ -61,7 +77,10 @@ defmodule NavigationHistoryTest do
 
   test "included_paths" do
     conn = conn(:get, "/") |> with_session
-    opts = NavigationHistory.Tracker.init(excluded_paths: ["/admin"], included_paths: [~r(/admin.*)])
+
+    opts =
+      NavigationHistory.Tracker.init(excluded_paths: ["/admin"], included_paths: [~r(/admin.*)])
+
     conn = NavigationHistory.Tracker.call(conn, opts)
     refute NavigationHistory.last_path(conn)
 

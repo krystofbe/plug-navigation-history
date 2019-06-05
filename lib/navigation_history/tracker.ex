@@ -43,13 +43,14 @@ defmodule NavigationHistory.Tracker do
   def call(conn, opts) do
     path = path_and_query(conn)
     method = conn.method
+
     if register?(method, path, opts),
       do: put_previous_path(conn, path, opts),
       else: conn
   end
 
   defp path_and_query(conn) do
-    query_portion = if (conn.query_string == ""), do: "", else: "?#{conn.query_string}"
+    query_portion = if conn.query_string == "", do: "", else: "?#{conn.query_string}"
     conn.request_path <> query_portion
   end
 
@@ -63,21 +64,37 @@ defmodule NavigationHistory.Tracker do
       do: path_matches_any?(path, opts[:included_paths]),
       else: not path_matches_any?(path, opts[:excluded_paths])
   end
+
   defp path_matches_any?(path, matches),
-    do: Enum.any?(matches, &(path_match?(path, &1)))
+    do: Enum.any?(matches, &path_match?(path, &1))
 
   defp path_match?(path, matched) when is_bitstring(matched),
     do: path == matched
+
   defp path_match?(path, matched),
     do: String.match?(path, matched)
 
   defp put_previous_path(conn, path, opts) do
     last_paths = NavigationHistory.last_paths(conn, opts)
-    paths = dequeue_path([path|last_paths], opts[:history_size])
+    maybe_put_previous_path(conn, path, last_paths, opts)
+  end
+
+  defp maybe_put_previous_path(conn, path, [last_path | _] = last_paths, opts) do
+    if last_path != path do
+      paths = dequeue_path([path | last_paths], opts[:history_size])
+      NavigationHistory.Session.save_paths(conn, paths, opts)
+    else
+      NavigationHistory.Session.save_paths(conn, last_paths, opts)
+    end
+  end
+
+  defp maybe_put_previous_path(conn, path, last_paths, opts) do
+    paths = dequeue_path([path | last_paths], opts[:history_size])
     NavigationHistory.Session.save_paths(conn, paths, opts)
   end
 
   defp dequeue_path(paths, history_size) when length(paths) > history_size,
     do: List.delete_at(paths, length(paths) - 1)
+
   defp dequeue_path(paths, _), do: paths
 end
